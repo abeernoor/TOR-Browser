@@ -17,7 +17,7 @@ type Node struct {
 	PubKey    string
 }
 
-//InputRead sotres the info got from ReadLine Function
+//InputRead stores the info got from ReadLine Function
 type InputRead struct {
 	line     []byte
 	isPrefix bool
@@ -49,7 +49,7 @@ func HandlingRelayList(relays *list.List, newRelay <-chan Node, deleteRelay <-ch
 		case <-requestlistchan:
 			responselistchan <- relays
 		case req := <-deleteRelay:
-			for element := relays.Front(); element != nil; element.Next() {
+			for element := relays.Front(); element != nil; element = element.Next() {
 				if req == element.Value {
 					relays.Remove(element)
 					break
@@ -61,7 +61,7 @@ func HandlingRelayList(relays *list.List, newRelay <-chan Node, deleteRelay <-ch
 
 func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, requestlistchan chan<- Node, responselistchan <-chan *list.List) {
 	fmt.Println("Connected new user")
-	c.Write([]byte("To become Entry Relay (EN) Intermediate relay (I), Exit relay (EX) or not to participate (N)\n"))
+	//c.Write([]byte("To become Entry Relay (EN) Intermediate relay (I), Exit relay (EX) or not to participate (N)\n"))
 	clientreader := bufio.NewReader(c)
 	Option, _, _ := clientreader.ReadLine()
 	fmt.Println("Read input")
@@ -83,7 +83,7 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 		var output []byte
 		fmt.Println("going for select")
 		select {
-		case <-time.After(9000000000):
+		case <-time.After(5000000000):
 			breakout = true
 		case output = <-readchan:
 		}
