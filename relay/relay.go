@@ -48,9 +48,14 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	//Generate a random path of relays
 	//Send to entry relay: address of mid and exit relay and URL
 	//Wait for response
+	clientConnection.Write([]byte("KEY"))
 	clientConnection.Write([]byte("GET_LIST"))
-	buffer := make([]byte, 500, 1024)
+	buffer := make([]byte, 0, 1024)
 	n, _ := clientConnection.Read(buffer)
+	if buffer == nil || len(buffer) == 0 {
+		rw.Write([]byte("<html><h2>ERROR! Not enough relays in TOR Network</h2></html>"))
+		return
+	}
 	relayList := make([]Node, 0, 10)
 	json.Unmarshal(buffer[:n], &relayList)
 	entryRelayList := make([]Node, 0, 10)
