@@ -16,24 +16,12 @@ type Node struct {
 	PubKey    string
 }
 
-//InputRead sotres the info got from ReadLine Function
-type InputRead struct {
-	line     []byte
-	isPrefix bool
-	err      error
-}
-
-func (ir *InputRead) readinput(line []byte, isPrefix bool, err error) []byte {
-	ir.err = err
-	ir.isPrefix = isPrefix
-	ir.line = line
+func readinput(line []byte, isPrefix bool, err error) []byte {
 	return line
 }
 
 func nonBlockingReader(buf *bufio.Reader, read chan<- []byte) {
-	input := InputRead{}
-	read <- input.readinput(buf.ReadLine())
-
+	read <- readinput(buf.ReadLine())
 }
 
 // HandlingRelayList maintains the list of active relays
@@ -57,6 +45,8 @@ func HandlingRelayList(relays []Node, newRelay <-chan Node, deleteRelay <-chan N
 			}
 			if en == true && I == true && ex == true {
 				responselistchan <- relays
+			} else {
+				responselistchan <- nil
 			}
 		case req := <-deleteRelay:
 			for i, element := range relays {
@@ -107,6 +97,7 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 					fmt.Println(element)
 				}
 				v, _ := json.Marshal(&res)
+
 				c.Write(v)
 			} else if string(output) == "EXIT" {
 				breakout = true
