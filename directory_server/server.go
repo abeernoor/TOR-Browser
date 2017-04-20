@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"container/list"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -33,25 +32,36 @@ func (ir *InputRead) readinput(line []byte, isPrefix bool, err error) []byte {
 
 func nonBlockingReader(buf *bufio.Reader, read chan<- []byte) {
 	input := InputRead{}
-	select {
-	case read <- input.readinput(buf.ReadLine()):
-	}
+	read <- input.readinput(buf.ReadLine())
 
 }
 
 // HandlingRelayList maintains the list of active relays
-func HandlingRelayList(relays *list.List, newRelay <-chan Node, deleteRelay <-chan Node, requestlistchan <-chan Node, responselistchan chan<- *list.List) {
+func HandlingRelayList(relays []Node, newRelay <-chan Node, deleteRelay <-chan Node, requestlistchan <-chan Node, responselistchan chan<- []Node) {
 	for {
 		select {
 		case newRelay := <-newRelay:
-			relays.PushBack(newRelay)
-			// list = append(list, newRelay)
+			relays = append(relays, newRelay)
 		case <-requestlistchan:
-			responselistchan <- relays
+			en := false
+			ex := false
+			I := false
+			for _, element := range relays {
+				if element.RelayType == "EN" {
+					en = true
+				} else if element.RelayType == "I" {
+					I = true
+				} else if element.RelayType == "EX" {
+					ex = true
+				}
+			}
+			if en == true && I == true && ex == true {
+				responselistchan <- relays
+			}
 		case req := <-deleteRelay:
-			for element := relays.Front(); element != nil; element.Next() {
-				if req == element.Value {
-					relays.Remove(element)
+			for i, element := range relays {
+				if element == req {
+					relays = append(relays[:i], relays[i+1:]...)
 					break
 				}
 			}
@@ -59,23 +69,24 @@ func HandlingRelayList(relays *list.List, newRelay <-chan Node, deleteRelay <-ch
 	}
 }
 
-func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, requestlistchan chan<- Node, responselistchan <-chan *list.List) {
+func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, requestlistchan chan<- Node, responselistchan <-chan []Node) {
 	fmt.Println("Connected new user")
-	c.Write([]byte("To become Entry Relay (EN) Intermediate relay (I), Exit relay (EX) or not to participate (N)\n"))
 	clientreader := bufio.NewReader(c)
 	Option, _, _ := clientreader.ReadLine()
 	fmt.Println("Read input")
 	fmt.Println(c.RemoteAddr())
 	var n Node
-	addr := c.RemoteAddr()
 	fmt.Println("Entered Option : ", string(Option))
+	//storing info of the connected relay
 	n.RelayType = string(Option)
 	key, _, _ := clientreader.ReadLine()
-	n.IPandPort = addr.String()
+	n.IPandPort = c.RemoteAddr().String()
 	n.PubKey = string(key)
+
 	if n.RelayType != "N" {
 		clientchan <- n
 	}
+
 	for {
 		breakout := false
 		readchan := make(chan []byte)
@@ -83,7 +94,7 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 		var output []byte
 		fmt.Println("going for select")
 		select {
-		case <-time.After(9000000000):
+		case <-time.After(15000000000):
 			breakout = true
 		case output = <-readchan:
 		}
@@ -92,11 +103,10 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 			if string(output) == "GET_LIST" {
 				requestlistchan <- n
 				res := <-responselistchan
-				for i := res.Front(); i != nil; i = i.Next() {
-					fmt.Println(i.Value)
+				for _, element := range res {
+					fmt.Println(element)
 				}
-				v, _ := json.Marshal(res)
-				fmt.Println(v)
+				v, _ := json.Marshal(&res)
 				c.Write(v)
 			} else if string(output) == "EXIT" {
 				breakout = true
@@ -119,10 +129,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mylist := list.New()
+	mylist := make([]Node, 0, 5)
 	addRelay := make(chan Node)
 	removeRelay := make(chan Node)
-	requestchan := make(chan *list.List)
+	requestchan := make(chan []Node)
 	responsechan := make(chan Node)
 	go HandlingRelayList(mylist, addRelay, removeRelay, responsechan, requestchan)
 	for {
