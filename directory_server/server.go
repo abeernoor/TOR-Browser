@@ -92,27 +92,17 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 		readchan := make(chan []byte)
 		go nonBlockingReader(clientreader, readchan)
 		var output []byte
-<<<<<<< HEAD
-		//fmt.Println("going for select")
-=======
 		// fmt.Println("going for select")
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 		select {
 		case <-time.After(5000000000):
 			breakout = true
 		case output = <-readchan:
 		}
-<<<<<<< HEAD
-		//fmt.Println("Read from chan", string(output))
-		if breakout == false && len(output) > 0 {
-			if string(output) == "GET_LIST" {
-=======
 		// fmt.Println("Read from chan", string(output))
 		if breakout == false && len(output) > 0 {
 			str := strings.TrimSpace(string(output))
 			if str == "GET_LIST" {
 				fmt.Println("sending list")
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 				requestlistchan <- n
 				res := <-responselistchan
 				for _, element := range res {

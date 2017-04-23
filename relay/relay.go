@@ -40,11 +40,6 @@ var clientConnection net.Conn
 func sendAliveMessages(conn net.Conn, sig <-chan os.Signal) {
 	d, _ := time.ParseDuration("2s")
 	for {
-<<<<<<< HEAD
-		d, _ := time.ParseDuration("2s")
-		time.Sleep(d)
-		conn.Write([]byte("ALIVE\n"))
-=======
 		select {
 		case <-sig:
 			fmt.Println("signal got getting out", conn.Close())
@@ -53,7 +48,6 @@ func sendAliveMessages(conn net.Conn, sig <-chan os.Signal) {
 		case <-time.After(d):
 			conn.Write([]byte("ALIVE\n"))
 		}
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	}
 }
 
@@ -62,11 +56,6 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	//Generate a random path of relays
 	//Send to entry relay: address of mid and exit relay and URL
 	//Wait for response
-<<<<<<< HEAD
-	clientConnection.Write([]byte("GET_LIST\n"))
-	buffer := make([]byte, 0, 1024)
-	n, _ := clientConnection.Read(buffer)
-=======
 	fmt.Println("GETTING LIST")
 	clientConnection.Write([]byte("GET_LIST\n"))
 	fmt.Println("got list")
@@ -76,7 +65,6 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 	fmt.Println("Recieved Buffer", buffer)
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	if buffer == nil || len(buffer) == 0 {
 		rw.Write([]byte("<html><h2>ERROR! Not enough relays in TOR Network</h2></html>"))
 		return
@@ -128,13 +116,6 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 }
 
 func listenAsARelay(relayType string) {
-<<<<<<< HEAD
-
-	line, err := net.Listen("tcp", ":"+string(rand.Intn(3000)+4000))
-	for err != nil {
-		line, err = net.Listen("tcp", ":"+string(rand.Intn(3000)+4000))
-	}
-=======
 	defer clientConnection.Close()
 	port := strconv.Itoa(rand.Intn(3000) + 4000)
 	line, err := net.Listen("tcp", ":"+port)
@@ -145,7 +126,6 @@ func listenAsARelay(relayType string) {
 	}
 	clientConnection.Write([]byte(port + "\n"))
 
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	for {
 		con, _ := line.Accept()
 		go handleRelayConnection(con, relayType)
@@ -252,11 +232,8 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 }
 
 func main() {
-<<<<<<< HEAD
-=======
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	rand.Seed(int64(time.Now().Nanosecond()))
 	fmt.Println("Do you want to participate as a relay?")
 	//Take input
@@ -288,29 +265,17 @@ func main() {
 		fmt.Println("1")
 		clientConnection.Write([]byte(msg + "\n"))
 		clientConnection.Write([]byte("KEY\n"))
-<<<<<<< HEAD
-		go sendAliveMessages(clientConnection)
-=======
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 		go listenAsARelay(msg)
 		time.Sleep(20000000)
 		go sendAliveMessages(clientConnection, sig)
 
 	} else {
 		clientConnection.Write([]byte("N\n"))
-<<<<<<< HEAD
-=======
 		clientConnection.Write([]byte("KEY\n"))
 		go sendAliveMessages(clientConnection, sig)
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	}
 	defer clientConnection.Close()
 	http.HandleFunc("/fastor/", clientHandler)
-<<<<<<< HEAD
-	err := http.ListenAndServe(":"+string(rand.Intn(3000)+3000), nil)
-	for err != nil {
-		err = http.ListenAndServe(":"+string(rand.Intn(3000)+3000), nil)
-=======
 	fmt.Println("assigning port")
 	port := rand.Intn(3000) + 3000
 	fmt.Println("Might be Listening at port : ", port)
@@ -323,7 +288,6 @@ func main() {
 		fmt.Println(":" + strconv.Itoa(port))
 		err = http.ListenAndServe(":"+strconv.Itoa(port), nil)
 		fmt.Println(err)
->>>>>>> c5c103c7720377e097fd2a7e230f7a55bccdd22a
 	}
 
 }
