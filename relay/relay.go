@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
@@ -36,11 +37,17 @@ type torData struct {
 
 var clientConnection net.Conn
 
-func sendAliveMessages(conn net.Conn) {
+func sendAliveMessages(conn net.Conn, sig <-chan os.Signal) {
+	d, _ := time.ParseDuration("2s")
 	for {
-		d, _ := time.ParseDuration("2s")
-		time.Sleep(d)
-		conn.Write([]byte("ALIVE\n"))
+		select {
+		case <-sig:
+			fmt.Println("signal got getting out", conn.Close())
+			clientConnection.Close()
+			return
+		case <-time.After(d):
+			conn.Write([]byte("ALIVE\n"))
+		}
 	}
 }
 
@@ -54,7 +61,6 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	fmt.Println("got list")
 	buffer := make([]byte, 2048, 10240)
 	n, err := clientConnection.Read(buffer)
-
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -89,15 +95,15 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	buffer, _ = json.Marshal(tData)
 	fmt.Println(buffer)
 	conn.Write(buffer)
-	newBuffer := make([]byte, 1024, 1024)
-	n, err = conn.Read(newBuffer)
-	if err != nil {
-		fmt.Println(err)
-	}
-	var size string
-	json.Unmarshal(newBuffer[:n], &size)
-	intsize, _ := strconv.Atoi(size)
-	newBuffer = make([]byte, intsize, intsize)
+	// newBuffer := make([]byte, 1024, 1024)
+	// n, err = conn.Read(newBuffer)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// var size string
+	// json.Unmarshal(newBuffer[:n], &size)
+	// intsize, _ := strconv.Atoi(size)
+	newBuffer := make([]byte, 102400, 102400)
 	n, err = conn.Read(newBuffer)
 	if err != nil {
 		fmt.Println(err)
@@ -110,16 +116,20 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 }
 
 func listenAsARelay(relayType string) {
+	defer clientConnection.Close()
 	port := strconv.Itoa(rand.Intn(3000) + 4000)
 	line, err := net.Listen("tcp", ":"+port)
+	defer line.Close()
 	for err != nil {
 		port = strconv.Itoa(rand.Intn(3000) + 4000)
 		line, err = net.Listen("tcp", ":"+port)
 	}
 	clientConnection.Write([]byte(port + "\n"))
+
 	for {
 		con, _ := line.Accept()
 		go handleRelayConnection(con, relayType)
+
 	}
 }
 
@@ -128,6 +138,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 	//or get page from server if you are exit relay
 	buffer := make([]byte, 1024, 10240)
 	n, _ := conn.Read(buffer)
+	defer conn.Close()
 	tData := torData{}
 	json.Unmarshal(buffer[:n], &tData)
 	n = 0
@@ -137,20 +148,20 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		newBuffer, _ := json.Marshal(tData)
 		fmt.Println(newBuffer)
 		midRelayConn.Write(newBuffer)
-		clientreader := bufio.NewReader(midRelayConn)
-		nbuffer, _, _ := clientreader.ReadLine()
-		clientwriter := bufio.NewWriter(conn)
-		clientwriter.Write(nbuffer)
-		// conn.Write(nbuffer)
-		fmt.Println(len(nbuffer))
-		size := ""
-		json.Unmarshal(nbuffer, &size)
-		intsize, err := strconv.Atoi(strings.TrimSpace(size))
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println("incoming size", intsize)
-		buffer = make([]byte, intsize, intsize)
+		// clientreader := bufio.NewReader(midRelayConn)
+		// nbuffer, _, _ := clientreader.ReadLine()
+		// clientwriter := bufio.NewWriter(conn)
+		// clientwriter.Write(nbuffer)
+		// // conn.Write(nbuffer)
+		// fmt.Println(len(nbuffer))
+		// size := ""
+		// json.Unmarshal(nbuffer, &size)
+		// intsize, err := strconv.Atoi(strings.TrimSpace(size))
+		// if err != nil {
+		// 	fmt.Println(err)
+		// }
+		// fmt.Println("incoming size", intsize)
+		buffer = make([]byte, 102400, 102400)
 		n, _ = midRelayConn.Read(buffer)
 		fmt.Println("printing recieved from middle")
 		fmt.Println(buffer[:n])
@@ -162,21 +173,21 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 			fmt.Println(err)
 		}
 		exitRelayConn.Write(newBuffer)
-		clientreader := bufio.NewReader(exitRelayConn)
-		nbuffer, _, _ := clientreader.ReadLine()
-		conn.Write(nbuffer)
-		fmt.Println(len(nbuffer))
-		size := ""
-		json.Unmarshal(nbuffer, &size)
-		intsize, _ := strconv.Atoi(strings.TrimSpace(size))
-		clientwriter := bufio.NewWriter(conn)
-		clientwriter.Write(nbuffer)
+		// clientreader := bufio.NewReader(exitRelayConn)
+		// nbuffer, _, _ := clientreader.ReadLine()
 		// conn.Write(nbuffer)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// }
-		fmt.Println("incoming size", intsize)
-		buffer = make([]byte, intsize, intsize)
+		// fmt.Println(len(nbuffer))
+		// size := ""
+		// json.Unmarshal(nbuffer, &size)
+		// intsize, _ := strconv.Atoi(strings.TrimSpace(size))
+		// clientwriter := bufio.NewWriter(conn)
+		// clientwriter.Write(nbuffer)
+		// // conn.Write(nbuffer)
+		// // if err != nil {
+		// // 	fmt.Println(err)
+		// // }
+		// fmt.Println("incoming size", intsize)
+		buffer = make([]byte, 102400, 102400)
 		n, _ = exitRelayConn.Read(buffer)
 		fmt.Println("printing recieved from exit")
 		fmt.Println(buffer[:n])
@@ -202,8 +213,8 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		// fmt.Println("before : ", len(buffersize), cap(buffersize))
 		// buffersize = append([]byte(nil), buffersize[:len(buffersize)]...)
 		// fmt.Println("after : ", len(buffersize), cap(buffersize))
-		clientwriter := bufio.NewWriter(conn)
-		clientwriter.Write(buffersize)
+		// clientwriter := bufio.NewWriter(conn)
+		// clientwriter.Write(buffersize)
 		// _, err = conn.Write(buffersize)
 		// if err != nil {
 		// 	fmt.Println(err)
@@ -217,10 +228,12 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 
 	}
 	fmt.Println("writing back")
-	conn.Close()
+
 }
 
 func main() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
 	rand.Seed(int64(time.Now().Nanosecond()))
 	fmt.Println("Do you want to participate as a relay?")
 	//Take input
@@ -254,13 +267,14 @@ func main() {
 		clientConnection.Write([]byte("KEY\n"))
 		go listenAsARelay(msg)
 		time.Sleep(20000000)
-		go sendAliveMessages(clientConnection)
+		go sendAliveMessages(clientConnection, sig)
 
 	} else {
 		clientConnection.Write([]byte("N\n"))
 		clientConnection.Write([]byte("KEY\n"))
-		go sendAliveMessages(clientConnection)
+		go sendAliveMessages(clientConnection, sig)
 	}
+	defer clientConnection.Close()
 	http.HandleFunc("/fastor/", clientHandler)
 	fmt.Println("assigning port")
 	port := rand.Intn(3000) + 3000
