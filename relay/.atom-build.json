@@ -1,8 +1,0 @@
-{
-  "cmd": "$GOROOT/bin/go run {FILE_ACTIVE}",
-  "shell": true,
-  "env": {
-    "GOROOT": "/usr/local/go",
-    "GOPATH": "/home/abeer/Desktop/Concurrent/Go"
-  }
-}
