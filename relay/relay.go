@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -15,8 +16,6 @@ import (
 	"time"
 )
 
-const httpPort = ":7000"
-const otherPort = ":7001"
 const entryRelay = "EN"
 const middleRelay = "I"
 const exitRelay = "EX"
@@ -42,7 +41,8 @@ func sendAliveMessages(conn net.Conn, sig <-chan os.Signal) {
 	for {
 		select {
 		case <-sig:
-			fmt.Println("signal got getting out", conn.Close())
+			log.Println("Closing...")
+			conn.Close()
 			clientConnection.Close()
 			return
 		case <-time.After(d):
@@ -56,15 +56,14 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	//Generate a random path of relays
 	//Send to entry relay: address of mid and exit relay and URL
 	//Wait for response
-	fmt.Println("GETTING LIST")
+	log.Println("Getting list")
 	clientConnection.Write([]byte("GET_LIST\n"))
-	fmt.Println("got list")
 	buffer := make([]byte, 2048, 10240)
 	n, err := clientConnection.Read(buffer)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
-	fmt.Println("Recieved Buffer", buffer)
+	log.Println("Recieved List: ", buffer)
 	if buffer == nil || len(buffer) == 0 {
 		rw.Write([]byte("<html><h2>ERROR! Not enough relays in TOR Network</h2></html>"))
 		return
@@ -88,13 +87,17 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	chEntryRelay := entryRelayList[rand.Intn(len(entryRelayList))]
 	chMidRelay := middleRelayList[rand.Intn(len(middleRelayList))]
 	chExitRelay := exitRelayList[rand.Intn(len(exitRelayList))]
+	log.Println("Entry Relay chosen: ", chEntryRelay)
+	log.Println("Middle Relay chosen: ", chMidRelay)
+	log.Println("Exit Relay chosen: ", chExitRelay)
 
 	tData := torData{MidRelay: chMidRelay.IPandPort, ExitRelay: chExitRelay.IPandPort, URL: "http://" + r.URL.Path[len("/fastor/"):], PageBody: ""}
-	fmt.Println(tData)
 	conn, _ := net.Dial("tcp", ":"+chEntryRelay.IPandPort)
+	log.Println("Connected with Entry Relay")
 	buffer, _ = json.Marshal(tData)
-	fmt.Println(buffer)
+	//fmt.Println(buffer)
 	conn.Write(buffer)
+	log.Println("Sent data to Entry Relay")
 	// newBuffer := make([]byte, 1024, 1024)
 	// n, err = conn.Read(newBuffer)
 	// if err != nil {
@@ -106,12 +109,13 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	newBuffer := make([]byte, 102400, 102400)
 	n, err = conn.Read(newBuffer)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
+	log.Println("Read webpage from entry relay")
 	newTData := torData{}
 	json.Unmarshal(newBuffer[:n], &newTData)
-	fmt.Println("Printing the fetched Page")
-	// fmt.Println(newTData.PageBody)
+	//fmt.Println("Printing the fetched Page")
+	//fmt.Println(newTData.PageBody)
 	rw.Write([]byte(newTData.PageBody))
 }
 
@@ -125,9 +129,11 @@ func listenAsARelay(relayType string) {
 		line, err = net.Listen("tcp", ":"+port)
 	}
 	clientConnection.Write([]byte(port + "\n"))
+	log.Println("Port sent to DS on which this relay is listening for other relay requests")
 
 	for {
 		con, _ := line.Accept()
+		log.Println("Got a request from relay: ", con.RemoteAddr())
 		go handleRelayConnection(con, relayType)
 
 	}
@@ -138,6 +144,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 	//or get page from server if you are exit relay
 	buffer := make([]byte, 1024, 10240)
 	n, _ := conn.Read(buffer)
+	log.Println("Read request from relay: ", conn.RemoteAddr())
 	defer conn.Close()
 	tData := torData{}
 	json.Unmarshal(buffer[:n], &tData)
@@ -146,7 +153,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		midRelayConn, _ := net.Dial("tcp", ":"+tData.MidRelay)
 		tData.MidRelay = ""
 		newBuffer, _ := json.Marshal(tData)
-		fmt.Println(newBuffer)
+		log.Println("Forwarding request to Middle Relay")
 		midRelayConn.Write(newBuffer)
 		// clientreader := bufio.NewReader(midRelayConn)
 		// nbuffer, _, _ := clientreader.ReadLine()
@@ -163,15 +170,16 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		// fmt.Println("incoming size", intsize)
 		buffer = make([]byte, 102400, 102400)
 		n, _ = midRelayConn.Read(buffer)
-		fmt.Println("printing recieved from middle")
-		fmt.Println(buffer[:n])
+		log.Println("Recieved response from Middle Relay")
+		//fmt.Println(buffer[:n])
 	} else if relayType == middleRelay {
 		exitRelayConn, _ := net.Dial("tcp", ":"+tData.ExitRelay)
 		tData.ExitRelay = ""
 		newBuffer, err := json.Marshal(tData)
 		if err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
 		}
+		log.Println("Forwarding request to Exit Relay")
 		exitRelayConn.Write(newBuffer)
 		// clientreader := bufio.NewReader(exitRelayConn)
 		// nbuffer, _, _ := clientreader.ReadLine()
@@ -189,27 +197,27 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		// fmt.Println("incoming size", intsize)
 		buffer = make([]byte, 102400, 102400)
 		n, _ = exitRelayConn.Read(buffer)
-		fmt.Println("printing recieved from exit")
-		fmt.Println(buffer[:n])
+		log.Println("Recieved response from Exit Relay")
+		//fmt.Println(buffer[:n])
 
 	} else {
-		fmt.Println(tData.URL)
+		log.Println("Fetching webpage", tData.URL)
 		response, err := http.Get(tData.URL)
 		if err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
 		}
 		responseBody, er := ioutil.ReadAll(response.Body)
 		if er != nil {
-			fmt.Println(er)
+			log.Fatal(er)
 		}
 		// fmt.Println(string(responseBody))
 		response.Body.Close()
 		tData.PageBody = string(responseBody)
 		buffer, _ = json.Marshal(tData)
-		size := len(buffer)
-		str := strconv.Itoa(size) + "\n"
-		fmt.Println("size string ", str)
-		buffersize, _ := json.Marshal(str)
+		//size := len(buffer)
+		//str := strconv.Itoa(size) + "\n"
+		//fmt.Println("size string ", str)
+		//buffersize, _ := json.Marshal(str)
 		// fmt.Println("before : ", len(buffersize), cap(buffersize))
 		// buffersize = append([]byte(nil), buffersize[:len(buffersize)]...)
 		// fmt.Println("after : ", len(buffersize), cap(buffersize))
@@ -219,7 +227,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		// if err != nil {
 		// 	fmt.Println(err)
 		// }
-		fmt.Println(size, buffersize)
+		//fmt.Println(size, buffersize)
 	}
 	if n != 0 {
 		conn.Write(buffer[:n])
@@ -227,7 +235,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 		conn.Write(buffer)
 
 	}
-	fmt.Println("writing back")
+	log.Println("Writing back")
 
 }
 
@@ -235,59 +243,71 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	rand.Seed(int64(time.Now().Nanosecond()))
+	log.SetFlags(log.LstdFlags)
 	fmt.Println("Do you want to participate as a relay?")
 	//Take input
 	consoleReader := bufio.NewReader(os.Stdin)
-	input, _ := consoleReader.ReadString('\n')
+	input, err := consoleReader.ReadString('\n')
+	if err != nil {
+		log.Fatal(err)
+	}
 	input = strings.TrimSpace(input)
 	msg := ""
 	if strings.ToLower(input) == "yes" || strings.ToLower(input) == "y" {
-		fmt.Println("1")
 		fmt.Print("1. Entry Relay\n2. Middle Relay\n3. Exit Relay\nEnter your choice: ")
 		choice, _ := consoleReader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 		switch choice {
 		case "1":
 			msg = entryRelay
+			log.Println("Joined as Entry Relay")
 			break
 		case "2":
 			msg = middleRelay
+			log.Println("Joined as Middle Relay")
 			break
 		case "3":
 			msg = exitRelay
+			log.Println("Joined as Exit Relay")
 			break
 		default:
 			break
 		}
 	}
-	clientConnection, _ = net.Dial("tcp", "localhost:6000")
+	clientConnection, err = net.Dial("tcp", "localhost:6000")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Connected to Directory Server!")
 	if msg != "" {
-		fmt.Println("1")
 		clientConnection.Write([]byte(msg + "\n"))
 		clientConnection.Write([]byte("KEY\n"))
+		log.Println("Relay Type and Public Key sent to Directory Server")
 		go listenAsARelay(msg)
+		log.Println("Started listening for other relay requests")
 		time.Sleep(20000000)
 		go sendAliveMessages(clientConnection, sig)
-
+		log.Println("Started sending heartbeat")
 	} else {
 		clientConnection.Write([]byte("N\n"))
 		clientConnection.Write([]byte("KEY\n"))
+		log.Println("Relay Type and Public Key send to Directory Server")
 		go sendAliveMessages(clientConnection, sig)
+		log.Println("Started sending heartbeat")
 	}
 	defer clientConnection.Close()
 	http.HandleFunc("/fastor/", clientHandler)
-	fmt.Println("assigning port")
 	port := rand.Intn(3000) + 3000
-	fmt.Println("Might be Listening at port : ", port)
-	err := http.ListenAndServe(":"+strconv.Itoa(port), nil)
-	fmt.Println(err)
+	if msg == "" {
+		log.Println("Listening for client requests at port: ", port)
+	}
+	err = http.ListenAndServe(":"+strconv.Itoa(port), nil)
 	for err != nil {
 		port = rand.Intn(3000) + 3000
-		fmt.Println("Might be Listening at port : ", port)
-
-		fmt.Println(":" + strconv.Itoa(port))
+		if msg == "" {
+			log.Println("Listening for client requests at port: ", port)
+		}
 		err = http.ListenAndServe(":"+strconv.Itoa(port), nil)
-		fmt.Println(err)
 	}
 
 }
