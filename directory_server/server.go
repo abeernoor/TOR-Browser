@@ -82,14 +82,14 @@ func handleClient(c net.Conn, clientchan chan<- Node, deleteRelay chan<- Node, r
 		readchan := make(chan []byte)
 		go nonBlockingReader(clientreader, readchan)
 		var output []byte
-		fmt.Println("going for select")
+		//fmt.Println("going for select")
 		select {
 		case <-time.After(15000000000):
 			breakout = true
 		case output = <-readchan:
 		}
-		fmt.Println("Read from chan", string(output))
-		if breakout == false {
+		//fmt.Println("Read from chan", string(output))
+		if breakout == false && len(output) > 0 {
 			if string(output) == "GET_LIST" {
 				requestlistchan <- n
 				res := <-responselistchan

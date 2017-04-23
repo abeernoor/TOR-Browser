@@ -39,7 +39,7 @@ func sendAliveMessages(conn net.Conn) {
 	for {
 		d, _ := time.ParseDuration("2s")
 		time.Sleep(d)
-		conn.Write([]byte("ALIVE"))
+		conn.Write([]byte("ALIVE\n"))
 	}
 }
 
@@ -48,8 +48,7 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 	//Generate a random path of relays
 	//Send to entry relay: address of mid and exit relay and URL
 	//Wait for response
-	clientConnection.Write([]byte("KEY"))
-	clientConnection.Write([]byte("GET_LIST"))
+	clientConnection.Write([]byte("GET_LIST\n"))
 	buffer := make([]byte, 0, 1024)
 	n, _ := clientConnection.Read(buffer)
 	if buffer == nil || len(buffer) == 0 {
@@ -88,7 +87,11 @@ func clientHandler(rw http.ResponseWriter, r *http.Request) {
 }
 
 func listenAsARelay(relayType string) {
-	line, _ := net.Listen("tcp", otherPort)
+
+	line, err := net.Listen("tcp", ":"+string(rand.Intn(3000)+4000))
+	for err != nil {
+		line, err = net.Listen("tcp", ":"+string(rand.Intn(3000)+4000))
+	}
 	for {
 		con, _ := line.Accept()
 		go handleRelayConnection(con, relayType)
@@ -133,6 +136,7 @@ func handleRelayConnection(conn net.Conn, relayType string) {
 }
 
 func main() {
+	rand.Seed(int64(time.Now().Nanosecond()))
 	fmt.Println("Do you want to participate as a relay?")
 	//Take input
 	consoleReader := bufio.NewReader(os.Stdin)
@@ -140,6 +144,7 @@ func main() {
 	input = strings.TrimSpace(input)
 	msg := ""
 	if strings.ToLower(input) == "yes" || strings.ToLower(input) == "y" {
+		fmt.Println("1")
 		fmt.Print("1. Entry Relay\n2. Middle Relay\n3. Exit Relay\nEnter your choice: ")
 		choice, _ := consoleReader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
@@ -159,12 +164,18 @@ func main() {
 	}
 	clientConnection, _ = net.Dial("tcp", "localhost:6000")
 	if msg != "" {
-		clientConnection.Write([]byte(msg))
+		fmt.Println("1")
+		clientConnection.Write([]byte(msg + "\n"))
+		clientConnection.Write([]byte("KEY\n"))
 		go sendAliveMessages(clientConnection)
 		go listenAsARelay(msg)
 	} else {
-		clientConnection.Write([]byte("N"))
+		clientConnection.Write([]byte("N\n"))
 	}
 	http.HandleFunc("/fastor/", clientHandler)
-	http.ListenAndServe(httpPort, nil)
+	err := http.ListenAndServe(":"+string(rand.Intn(3000)+3000), nil)
+	for err != nil {
+		err = http.ListenAndServe(":"+string(rand.Intn(3000)+3000), nil)
+	}
+
 }
